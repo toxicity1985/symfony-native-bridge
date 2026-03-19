@@ -111,61 +111,56 @@ class NativeServeCommand extends Command
             return Command::FAILURE;
         }
 
-        // 3. Hot-reload watcher (fork a child process on Linux/macOS)
-        $watcherPid  = null;
-        $reloadPort  = $ipcPort + 1; // port dédié au watcher (ex: 9001)
+        // Connecter explicitement l'IpcBridge dans ce process CLI
+        // (le driver l'a déjà connecté pour lui-même, mais le bridge du watcher
+        //  est la même instance — on force la connexion si pas encore établie)
+        if (!$this->ipcBridge->isConnected()) {
+            try {
+                $this->ipcBridge->connect("ws://127.0.0.1:{$ipcPort}/ipc");
+            } catch (\Throwable $e) {
+                $io->warning("Hot-reload IPC connection failed: {$e->getMessage()} — hot-reload disabled.");
+                $hotReload = false;
+            }
+        }
 
-        if ($hotReload && function_exists('pcntl_fork')) {
-            $io->text('Starting <info>hot-reload</info> watcher (src/, templates/, config/)…');
-            $watcherPid = pcntl_fork();
+        // 3. Hot-reload watcher + keep-alive loop
+        $io->text('Press <comment>Ctrl+C</comment> to stop.');
 
-            if ($watcherPid === 0) {
-                // Child process — connexion WebSocket dédiée sur le port hot-reload
-                $watcherBridge = new \SymfonyNativeBridge\Bridge\IpcBridge('electron');
-
-                $waited = 0;
-                while ($waited < 5000) {
-                    try {
-                        $watcherBridge->connect("ws://127.0.0.1:{$reloadPort}/ipc");
-                        break;
-                    } catch (\Throwable) {
-                        usleep(200_000);
-                        $waited += 200;
-                    }
-                }
-
+        $watcher = null;
+        if ($hotReload) {
+            // Créer une instance IpcBridge DÉDIÉE pour le watcher
+            // (le driver occupe déjà la connexion principale)
+            $watcherBridge = new \SymfonyNativeBridge\Bridge\IpcBridge('electron');
+            try {
+                $watcherBridge->connect("ws://127.0.0.1:{$ipcPort}/ipc");
                 $watcher = new HotReloadWatcher(
                     ipcBridge:  $watcherBridge,
                     projectDir: getcwd(),
                 );
-                $watcher->start();
-                exit(0);
+                $watcher->init();
+                $io->text('Hot-reload active — watching <info>src/</info>, <info>templates/</info>, <info>config/</info>');
+            } catch (\Throwable $e) {
+                $io->warning("Hot-reload unavailable: {$e->getMessage()}");
             }
-        } elseif ($hotReload) {
-            $io->text('<comment>Hot-reload requires pcntl extension — skipping.</comment>');
         }
 
-        // 4. Keep running
-        $io->text('Press <comment>Ctrl+C</comment> to stop.');
+        // Boucle principale : tick toutes les 500ms
+        while ($phpServer->isRunning()) {
+            // Vérifier les fichiers modifiés
+            if ($watcher !== null) {
+                $watcher->tick();
+            }
 
-        try {
-            $phpServer->wait(function (string $type, string $buffer) use ($output): void {
-                if ($output->isVerbose()) {
-                    $output->write($buffer);
-                }
-            });
-        } catch (\Symfony\Component\Process\Exception\ProcessSignaledException $e) {
-            // Ctrl+C — clean exit
+            // Pomper la sortie du serveur PHP
+            $phpServer->getIncrementalOutput();
+            $phpServer->getIncrementalErrorOutput();
+
+            usleep(500_000); // 500ms
         }
 
-        // 5. Cleanup
+        // 4. Cleanup
         $io->newLine();
         $io->text('Shutting down…');
-
-        if ($watcherPid !== null) {
-            posix_kill($watcherPid, SIGTERM);
-            pcntl_waitpid($watcherPid, $status);
-        }
 
         $this->driver->stop();
 

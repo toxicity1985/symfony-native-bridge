@@ -316,21 +316,6 @@ composer install
 vendor/bin/phpunit
 ```
 
----
-
-## Roadmap
-
-- [ ] Symfony Messenger transport for async native calls
-- [ ] Hot-reload support in `native:serve` dev mode
-- [ ] `#[NativeRoute]` attribute for URL-less window routing
-- [ ] PHP binary embedding & cross-compilation guide
-- [ ] Multi-window management with named window registry
-- [ ] macOS Menu Bar app mode (no Dock icon)
-- [ ] Deep-link / protocol handler registration
-- [ ] Clipboard API service
-
----
-
 ## License
 
 MIT

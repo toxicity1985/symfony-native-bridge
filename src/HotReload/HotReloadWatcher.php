@@ -7,63 +7,69 @@ namespace SymfonyNativeBridge\HotReload;
 use SymfonyNativeBridge\Bridge\IpcBridge;
 
 /**
- * Watches PHP, Twig and YAML files for changes and triggers a window reload
- * in the native runtime via IPC.
+ * HotReloadWatcher — surveille les fichiers PHP/Twig/YAML et
+ * déclenche un rechargement des fenêtres Electron via IPC.
  *
- * Runs in a dedicated thread/process spawned by native:serve in dev mode.
- * Uses stat()-based polling — no inotify extension required.
+ * Fonctionne en mode "tick" : appelé toutes les 500ms dans la boucle
+ * principale de native:serve, sans fork ni thread séparé.
  */
 class HotReloadWatcher
 {
-    private const POLL_INTERVAL_MS = 500_000; // 500ms
-    private const EXTENSIONS       = ['php', 'twig', 'yaml', 'yml', 'env'];
+    private const EXTENSIONS = ['php', 'twig', 'yaml', 'yml', 'env'];
 
     /** @var array<string, int> path => mtime */
     private array $snapshots = [];
 
-    private bool $running = false;
-
     public function __construct(
         private readonly IpcBridge $ipcBridge,
         private readonly string    $projectDir,
-        private readonly array     $watchDirs = ['src', 'templates', 'config'],
+        private readonly array     $watchDirs  = ['src', 'templates', 'config'],
         private readonly array     $ignoreDirs = ['var', 'vendor', 'node_modules', '.git'],
     ) {}
 
-    public function start(): void
+    /**
+     * Prendre le snapshot initial — appeler une fois avant la boucle.
+     */
+    public function init(): void
     {
-        $this->running   = true;
         $this->snapshots = $this->snapshot();
-
         echo "[HotReload] Watching " . implode(', ', $this->watchDirs) . "…\n";
-
-        while ($this->running) {
-            usleep(self::POLL_INTERVAL_MS);
-
-            $current = $this->snapshot();
-            $changed = $this->diff($this->snapshots, $current);
-
-            if (!empty($changed)) {
-                foreach ($changed as $file) {
-                    echo "[HotReload] Changed: " . str_replace($this->projectDir . '/', '', $file) . "\n";
-                }
-
-                $this->reload($changed);
-                $this->snapshots = $current;
-            }
-        }
     }
 
-    public function stop(): void
+    /**
+     * Vérifier les changements — appeler à chaque itération de la boucle.
+     */
+    public function tick(): void
     {
-        $this->running = false;
+        $current = $this->snapshot();
+        $changed = $this->diff($this->snapshots, $current);
+
+        if (empty($changed)) {
+            return;
+        }
+
+        foreach ($changed as $file) {
+            $rel = str_replace($this->projectDir . '/', '', $file);
+            echo "[HotReload] Changed: {$rel}\n";
+        }
+
+        // Invalider l'opcache pour les fichiers PHP modifiés
+        foreach ($changed as $file) {
+            if (str_ends_with($file, '.php') && function_exists('opcache_invalidate')) {
+                opcache_invalidate($file, true);
+            }
+        }
+
+        // Envoyer window.reloadAll via l'IpcBridge déjà connecté
+        $this->ipcBridge->send('window.reloadAll');
+
+        // Mettre à jour le snapshot
+        $this->snapshots = $current;
     }
 
     // ── Internals ─────────────────────────────────────────────────────────────
 
-    /**
-     * @return array<string, int> path => mtime
-     */
+    /** @return array<string, int> */
     private function snapshot(): array
     {
         $files = [];
@@ -77,7 +83,6 @@ class HotReloadWatcher
 
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($absDir, \FilesystemIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::SELF_FIRST,
             );
 
             foreach ($iterator as $file) {
@@ -85,15 +90,14 @@ class HotReloadWatcher
                     continue;
                 }
 
-                // Skip ignored dirs
                 $path = $file->getPathname();
+
                 foreach ($this->ignoreDirs as $ignore) {
                     if (str_contains($path, DIRECTORY_SEPARATOR . $ignore . DIRECTORY_SEPARATOR)) {
                         continue 2;
                     }
                 }
 
-                // Only watch relevant extensions
                 if (!in_array($file->getExtension(), self::EXTENSIONS, true)) {
                     continue;
                 }
@@ -105,11 +109,7 @@ class HotReloadWatcher
         return $files;
     }
 
-    /**
-     * Returns paths that were added or modified.
-     *
-     * @return string[]
-     */
+    /** @return string[] */
     private function diff(array $before, array $after): array
     {
         $changed = [];
@@ -121,20 +121,5 @@ class HotReloadWatcher
         }
 
         return $changed;
-    }
-
-    private function reload(array $changedFiles): void
-    {
-        // Clear Symfony's opcache for changed PHP files
-        foreach ($changedFiles as $file) {
-            if (str_ends_with($file, '.php') && function_exists('opcache_invalidate')) {
-                opcache_invalidate($file, true);
-            }
-        }
-
-        // Tell Electron to reload all windows
-        if ($this->ipcBridge->isConnected()) {
-            $this->ipcBridge->send('window.reloadAll');
-        }
     }
 }

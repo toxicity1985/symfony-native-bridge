@@ -139,6 +139,7 @@ async function handleAction(msg, ws) {
           transparent:     payload.transparent    ?? false,
           backgroundColor: payload.backgroundColor ?? '#ffffff',
           alwaysOnTop:     payload.alwaysOnTop    ?? false,
+          autoHideMenuBar: payload.autoHideMenuBar ?? false,
           webPreferences:  { nodeIntegration: false, contextIsolation: true },
         });
 
@@ -182,6 +183,11 @@ async function handleAction(msg, ws) {
 
       case 'window.focus':
         windows.get(payload.windowId)?.focus();
+        reply(ws, id, null);
+        break;
+
+      case 'window.loadUrl':
+        windows.get(payload.windowId)?.loadURL(payload.url);
         reply(ws, id, null);
         break;
 

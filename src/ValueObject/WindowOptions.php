@@ -18,7 +18,8 @@ final class WindowOptions
         public readonly bool $transparent = false,
         public readonly string $backgroundColor = '#ffffff',
         public readonly bool $alwaysOnTop = false,
-        public readonly ?string $label = null,    // Tauri-specific window label
+        public readonly ?string $label = null,
+        public readonly bool $autoHideMenuBar = false,  // ← masque File/Edit/View/…
     ) {}
 
     public static function fromArray(array $data): self

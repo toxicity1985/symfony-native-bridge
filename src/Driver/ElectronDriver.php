@@ -28,18 +28,19 @@ class ElectronDriver implements NativeDriverInterface
     public function openWindow(string $url, WindowOptions $options): string
     {
         return (string) $this->ipcBridge->call('window.open', [
-            'url'         => $url,
-            'width'       => $options->width,
-            'height'      => $options->height,
-            'minWidth'    => $options->minWidth,
-            'minHeight'   => $options->minHeight,
-            'title'       => $options->title,
-            'resizable'   => $options->resizable,
-            'fullscreen'  => $options->fullscreen,
-            'frame'       => $options->frame,
-            'transparent' => $options->transparent,
+            'url'             => $url,
+            'width'           => $options->width,
+            'height'          => $options->height,
+            'minWidth'        => $options->minWidth,
+            'minHeight'       => $options->minHeight,
+            'title'           => $options->title,
+            'resizable'       => $options->resizable,
+            'fullscreen'      => $options->fullscreen,
+            'frame'           => $options->frame,
+            'transparent'     => $options->transparent,
             'backgroundColor' => $options->backgroundColor,
-            'alwaysOnTop' => $options->alwaysOnTop,
+            'alwaysOnTop'     => $options->alwaysOnTop,
+            'autoHideMenuBar' => $options->autoHideMenuBar,
         ]);
     }
 

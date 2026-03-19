@@ -1,0 +1,101 @@
+{# examples/01-hello-world/templates/hello/index.html.twig #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ app_name }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0f0f11;
+            color: #e8e8e8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 2rem;
+        }
+        .logo {
+            font-size: 5rem;
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #7c5cfc, #e040fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p.version {
+            color: #888;
+            font-size: .9rem;
+        }
+        .actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: .75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: .95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s;
+        }
+        button:hover { opacity: .85; }
+        .btn-primary   { background: #7c5cfc; color: #fff; }
+        .btn-secondary { background: #2a2a2e; color: #e8e8e8; }
+        .btn-success   { background: #22c55e; color: #fff; }
+        #result {
+            font-size: .85rem;
+            color: #888;
+            min-height: 1.2rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">⚡️</div>
+    <h1>{{ app_name }}</h1>
+    <p class="version">v{{ version }} — powered by Symfony + SymfonyNativeBridge</p>
+
+    <div class="actions">
+        <button class="btn-primary"   onclick="sendNotification()">🔔 Send Notification</button>
+        <button class="btn-secondary" onclick="openFile()">📂 Open File</button>
+        <button class="btn-success"   onclick="openDocs()">📖 Symfony Docs</button>
+    </div>
+
+    <p id="result"></p>
+
+    <script>
+        const result = document.getElementById('result');
+
+        async function post(url) {
+            const r = await fetch(url, { method: 'POST' });
+            return r.json();
+        }
+
+        async function sendNotification() {
+            await post('/notify');
+            result.textContent = 'Notification sent!';
+        }
+
+        async function openFile() {
+            result.textContent = 'Opening picker…';
+            const data = await post('/open-file');
+            result.textContent = data.paths.length
+                ? 'Selected: ' + data.paths.join(', ')
+                : 'Cancelled.';
+        }
+
+        async function openDocs() {
+            await post('/open-docs');
+            result.textContent = 'Opening in your browser…';
+        }
+    </script>
+</body>
+</html>

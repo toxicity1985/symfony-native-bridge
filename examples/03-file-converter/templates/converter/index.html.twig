@@ -1,0 +1,215 @@
+{# examples/03-file-converter/templates/converter/index.html.twig #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Converter</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0d1117;
+            color: #e6edf3;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+        .subtitle { color: #7d8590; font-size: .9rem; margin-bottom: 2rem; }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #58a6ff; }
+
+        .step { display: flex; align-items: center; gap: 1rem; margin-bottom: .75rem; }
+        .step-num {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: #1f6feb;
+            color: #fff;
+            font-size: .8rem;
+            font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        button {
+            padding: .6rem 1.2rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: .9rem;
+            font-weight: 600;
+            transition: opacity .15s;
+        }
+        button:hover { opacity: .85; }
+        button:disabled { opacity: .4; cursor: not-allowed; }
+        .btn-blue   { background: #1f6feb; color: #fff; }
+        .btn-green  { background: #238636; color: #fff; }
+        .btn-ghost  { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+
+        select {
+            padding: .6rem 1rem;
+            background: #21262d;
+            color: #e6edf3;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            font-size: .9rem;
+        }
+
+        .file-list {
+            list-style: none;
+            display: flex; flex-direction: column; gap: .4rem;
+            margin-top: .75rem;
+        }
+        .file-list li {
+            padding: .5rem .75rem;
+            background: #0d1117;
+            border-radius: 6px;
+            font-size: .8rem;
+            font-family: monospace;
+            color: #8b949e;
+            display: flex; align-items: center; gap: .5rem;
+        }
+        .file-list li .status { margin-left: auto; }
+        .ok   { color: #3fb950; }
+        .err  { color: #f85149; }
+
+        .history-row {
+            font-size: .8rem;
+            color: #7d8590;
+            padding: .4rem 0;
+            border-bottom: 1px solid #21262d;
+        }
+        .history-row:last-child { border-bottom: none; }
+
+        #output-path { font-family: monospace; font-size: .85rem; color: #58a6ff; }
+    </style>
+</head>
+<body>
+    <h1>🖼 File Converter</h1>
+    <p class="subtitle">Convert images between formats using native file dialogs</p>
+
+    <div class="card">
+        <h2>Convert Images</h2>
+
+        <div class="step">
+            <div class="step-num">1</div>
+            <button class="btn-blue" onclick="pickFiles()">📂 Select source files</button>
+            <span id="files-label" style="color:#7d8590;font-size:.85rem;">No files selected</span>
+        </div>
+
+        <div class="step">
+            <div class="step-num">2</div>
+            <button class="btn-ghost" onclick="pickOutput()">📁 Output folder</button>
+            <span id="output-path">{{ last_output ?: 'Not selected' }}</span>
+        </div>
+
+        <div class="step">
+            <div class="step-num">3</div>
+            <label for="format">Format:</label>
+            <select id="format">
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="webp">WebP</option>
+                <option value="gif">GIF</option>
+                <option value="bmp">BMP</option>
+            </select>
+        </div>
+
+        <div class="step" style="margin-top:.5rem">
+            <button class="btn-green" id="convert-btn" disabled onclick="runConvert()">
+                ⚡ Convert
+            </button>
+            <button class="btn-ghost" onclick="openAbout()">ℹ About</button>
+        </div>
+
+        <ul class="file-list" id="file-list"></ul>
+    </div>
+
+    {% if history %}
+    <div class="card">
+        <h2>Recent conversions</h2>
+        {% for entry in history %}
+        <div class="history-row">
+            {{ entry.at }} · {{ entry.count }} file(s) → <strong>{{ entry.format|upper }}</strong>
+            · {{ entry.output }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <script>
+        let selectedFiles = [];
+        let outputDir = '{{ last_output|e('js') }}';
+
+        function updateConvertBtn() {
+            document.getElementById('convert-btn').disabled =
+                selectedFiles.length === 0 || outputDir === '';
+        }
+
+        async function pickFiles() {
+            const r = await fetch('/pick-files', { method: 'POST' });
+            const d = await r.json();
+            selectedFiles = d.paths;
+            document.getElementById('files-label').textContent =
+                selectedFiles.length ? `${selectedFiles.length} file(s) selected` : 'No files selected';
+
+            const list = document.getElementById('file-list');
+            list.innerHTML = '';
+            selectedFiles.forEach(f => {
+                const li = document.createElement('li');
+                li.textContent = f;
+                li.dataset.path = f;
+                list.appendChild(li);
+            });
+            updateConvertBtn();
+        }
+
+        async function pickOutput() {
+            const r = await fetch('/pick-output', { method: 'POST' });
+            const d = await r.json();
+            if (d.folder) {
+                outputDir = d.folder;
+                document.getElementById('output-path').textContent = outputDir;
+            }
+            updateConvertBtn();
+        }
+
+        async function runConvert() {
+            document.getElementById('convert-btn').disabled = true;
+            document.getElementById('convert-btn').textContent = '⏳ Converting…';
+
+            const body = new URLSearchParams();
+            selectedFiles.forEach(f => body.append('sources[]', f));
+            body.set('output_dir', outputDir);
+            body.set('format', document.getElementById('format').value);
+
+            const r = await fetch('/convert', { method: 'POST', body });
+            const d = await r.json();
+
+            const items = document.querySelectorAll('#file-list li');
+            d.results.forEach(res => {
+                const li = [...items].find(i => i.dataset.path === res.src);
+                if (li) li.innerHTML += `<span class="status ok">✓ ${res.dest.split('/').pop()}</span>`;
+            });
+            d.errors.forEach(err => {
+                const li = [...items].find(i => i.dataset.path === err.src);
+                if (li) li.innerHTML += `<span class="status err">✗ ${err.error}</span>`;
+            });
+
+            document.getElementById('convert-btn').textContent = '⚡ Convert';
+            document.getElementById('convert-btn').disabled = false;
+        }
+
+        async function openAbout() {
+            await fetch('/about', { method: 'POST' });
+        }
+
+        updateConvertBtn();
+    </script>
+</body>
+</html>

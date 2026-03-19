@@ -1,0 +1,43 @@
+{
+    "name": "toxicity/symfony-native-bridge",
+    "description": "Build native desktop applications with Symfony — powered by Electron or Tauri",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "keywords": ["symfony", "native", "desktop", "electron", "tauri", "bundle"],
+    "authors": [
+        {
+            "name": "John Quairia",
+            "email": "tech@toxicity.be"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "symfony/framework-bundle": "^6.4 || ^7.0",
+        "symfony/console": "^6.4 || ^7.0",
+        "symfony/event-dispatcher": "^6.4 || ^7.0",
+        "symfony/process": "^6.4 || ^7.0",
+        "phrity/websocket": "^1.6"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "symfony/phpunit-bridge": "^7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SymfonyNativeBridge\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SymfonyNativeBridge\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": false
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

@@ -1,0 +1,163 @@
+{# examples/04-system-monitor/templates/monitor/index.html.twig #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Monitor</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
+            background: #050a0e;
+            color: #00ff88;
+            padding: 1.5rem;
+            min-height: 100vh;
+        }
+        h1 { font-size: 1.3rem; letter-spacing: .1em; margin-bottom: 1.5rem; }
+        h1 span { color: #00aaff; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .card {
+            background: #0a1520;
+            border: 1px solid #0f2a40;
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+        .card-label {
+            font-size: .7rem;
+            letter-spacing: .15em;
+            color: #00aaff;
+            margin-bottom: .5rem;
+        }
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .card-sub { font-size: .75rem; color: #336644; margin-top: .3rem; }
+
+        .gauge-wrap { margin-top: .75rem; }
+        .gauge-track {
+            height: 6px;
+            background: #0f2a40;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .gauge-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width .5s ease;
+        }
+        .cpu-fill  { background: linear-gradient(90deg, #00ff88, #00aaff); }
+        .mem-fill  { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+        .disk-fill { background: linear-gradient(90deg, #7c5cfc, #e040fb); }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: .4rem 0;
+            border-bottom: 1px solid #0f2a40;
+            font-size: .85rem;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-key   { color: #336644; }
+        .info-value { color: #00ff88; }
+
+        .dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+            margin-right: .4rem;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: .3; }
+        }
+    </style>
+</head>
+<body>
+    <h1><span class="dot"></span>SYSTEM <span>MONITOR</span></h1>
+
+    <div class="grid">
+        <div class="card">
+            <div class="card-label">CPU LOAD</div>
+            <div class="card-value" id="cpu-val">{{ stats.cpu }}%</div>
+            <div class="gauge-wrap">
+                <div class="gauge-track">
+                    <div class="gauge-fill cpu-fill" id="cpu-bar" style="width:{{ stats.cpu }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-label">MEMORY</div>
+            <div class="card-value" id="mem-val">{{ stats.memory.percent }}%</div>
+            <div class="card-sub" id="mem-sub">{{ stats.memory.used_mb }} / {{ stats.memory.total_mb }} MB</div>
+            <div class="gauge-wrap">
+                <div class="gauge-track">
+                    <div class="gauge-fill mem-fill" id="mem-bar" style="width:{{ stats.memory.percent }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-label">DISK</div>
+            <div class="card-value" id="disk-val">{{ stats.disk.percent }}%</div>
+            <div class="card-sub" id="disk-sub">{{ stats.disk.used_gb }} / {{ stats.disk.total_gb }} GB</div>
+            <div class="gauge-wrap">
+                <div class="gauge-track">
+                    <div class="gauge-fill disk-fill" id="disk-bar" style="width:{{ stats.disk.percent }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-label">SYSTEM INFO</div>
+            <div class="info-row">
+                <span class="info-key">OS</span>
+                <span class="info-value">{{ stats.os }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">PHP</span>
+                <span class="info-value">{{ stats.php }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-key">Uptime</span>
+                <span class="info-value" id="uptime-val">{{ stats.uptime }}</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function refresh() {
+            try {
+                const r = await fetch('/stats');
+                const d = await r.json();
+
+                document.getElementById('cpu-val').textContent  = d.cpu + '%';
+                document.getElementById('cpu-bar').style.width  = d.cpu + '%';
+
+                document.getElementById('mem-val').textContent  = d.memory.percent + '%';
+                document.getElementById('mem-sub').textContent  = `${d.memory.used_mb} / ${d.memory.total_mb} MB`;
+                document.getElementById('mem-bar').style.width  = d.memory.percent + '%';
+
+                document.getElementById('disk-val').textContent = d.disk.percent + '%';
+                document.getElementById('disk-sub').textContent = `${d.disk.used_gb} / ${d.disk.total_gb} GB`;
+                document.getElementById('disk-bar').style.width = d.disk.percent + '%';
+
+                document.getElementById('uptime-val').textContent = d.uptime;
+            } catch {}
+        }
+
+        // Refresh every 2 seconds
+        setInterval(refresh, 2000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+{# examples/02-todo-app/templates/todo/index.html.twig #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Todo App</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #1a1a2e;
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+        h1 { font-size: 1.8rem; font-weight: 700; }
+        .stats { color: #888; font-size: .9rem; }
+        .stats span { color: #7c5cfc; font-weight: 600; }
+
+        form.add-form {
+            display: flex;
+            gap: .75rem;
+            margin-bottom: 2rem;
+        }
+        form.add-form input {
+            flex: 1;
+            padding: .75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #0f0f1a;
+            color: #e8e8e8;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color .2s;
+        }
+        form.add-form input:focus { border-color: #7c5cfc; }
+        button.add-btn {
+            padding: .75rem 1.5rem;
+            background: #7c5cfc;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .todo-list { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: .85rem 1rem;
+            background: #16213e;
+            border-radius: 10px;
+            border: 1px solid #2a2a4a;
+            transition: background .15s;
+        }
+        .todo-item:hover { background: #1e2a4a; }
+        .todo-item.done .title { text-decoration: line-through; color: #555; }
+
+        .title { flex: 1; font-size: .95rem; }
+
+        .actions { display: flex; gap: .5rem; }
+        .actions button {
+            padding: .35rem .75rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: .8rem;
+            font-weight: 600;
+        }
+        .btn-toggle { background: #22c55e22; color: #22c55e; }
+        .btn-toggle.undo { background: #f59e0b22; color: #f59e0b; }
+        .btn-delete { background: #ef444422; color: #ef4444; }
+
+        .empty { text-align: center; padding: 3rem; color: #555; font-size: 1.1rem; }
+
+        footer {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .btn-export {
+            padding: .6rem 1.2rem;
+            background: #2a2a4a;
+            color: #888;
+            border: none;
+            border-radius: 8px;
+            font-size: .85rem;
+            cursor: pointer;
+        }
+        .btn-export:hover { color: #e8e8e8; background: #333360; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📝 Todo App</h1>
+        <p class="stats">
+            <span>{{ pending }}</span> pending ·
+            <span>{{ done }}</span> done
+        </p>
+    </header>
+
+    <form class="add-form" action="/todos/add" method="POST">
+        <input type="text" name="title" placeholder="Add a new task…" autofocus required>
+        <button type="submit" class="add-btn">+ Add</button>
+    </form>
+
+    {% if todos is empty %}
+        <p class="empty">🎉 Nothing to do! Add a task above.</p>
+    {% else %}
+        <ul class="todo-list">
+            {% for todo in todos %}
+            <li class="todo-item {{ todo.done ? 'done' : '' }}">
+                <span class="title">{{ todo.title }}</span>
+                <div class="actions">
+                    <form action="/todos/{{ todo.id }}/toggle" method="POST" style="display:inline">
+                        <button type="submit" class="btn-toggle {{ todo.done ? 'undo' : '' }}">
+                            {{ todo.done ? '↩ Undo' : '✓ Done' }}
+                        </button>
+                    </form>
+                    <form action="/todos/{{ todo.id }}/delete" method="POST" style="display:inline">
+                        <button type="submit" class="btn-delete">🗑</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <footer>
+        <button class="btn-export" onclick="exportTodos()">📤 Export JSON</button>
+    </footer>
+
+    <script>
+        async function exportTodos() {
+            const r = await fetch('/todos/export', { method: 'POST' });
+            const d = await r.json();
+            if (d.ok) console.log('Exported to', d.path);
+        }
+    </script>
+</body>
+</html>

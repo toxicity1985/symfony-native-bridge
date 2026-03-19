@@ -1,0 +1,454 @@
+{# examples/05-markdown-editor/templates/editor/index.html.twig #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Markdown Editor</title>
+    <!-- Marked.js for client-side Markdown rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <style>
+        :root {
+            --bg:        #1e1e2e;
+            --surface:   #181825;
+            --border:    #313244;
+            --text:      #cdd6f4;
+            --muted:     #6c7086;
+            --accent:    #cba6f7;
+            --green:     #a6e3a1;
+            --red:       #f38ba8;
+            --yellow:    #f9e2af;
+            --blue:      #89b4fa;
+            --font-size: {{ preferences.font_size }}px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .75rem;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .toolbar-group { display: flex; gap: .3rem; }
+        .toolbar-group + .toolbar-group { margin-left: .5rem; padding-left: .5rem; border-left: 1px solid var(--border); }
+
+        .tb-btn {
+            padding: .3rem .65rem;
+            border-radius: 5px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .tb-btn:hover { background: var(--border); color: var(--text); }
+        .tb-btn.danger:hover { background: #f38ba822; color: var(--red); }
+
+        .file-name {
+            flex: 1;
+            text-align: center;
+            font-size: .85rem;
+            color: var(--muted);
+        }
+        .file-name.unsaved { color: var(--yellow); }
+
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            flex-shrink: 0;
+        }
+        .status-dot.unsaved { background: var(--yellow); }
+
+        /* ── Split pane ── */
+        .panes {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .pane + .pane { border-left: 1px solid var(--border); }
+
+        .pane-header {
+            padding: .35rem .75rem;
+            font-size: .7rem;
+            letter-spacing: .1em;
+            color: var(--muted);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        #editor {
+            flex: 1;
+            width: 100%;
+            padding: 1.25rem;
+            background: var(--bg);
+            color: var(--text);
+            border: none;
+            outline: none;
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+            font-size: var(--font-size);
+            line-height: 1.7;
+            resize: none;
+            tab-size: 2;
+            {% if preferences.word_wrap %}white-space: pre-wrap;{% else %}white-space: pre; overflow-x: scroll;{% endif %}
+        }
+
+        #preview {
+            flex: 1;
+            padding: 1.25rem 2rem;
+            overflow-y: auto;
+            font-size: var(--font-size);
+            line-height: 1.75;
+        }
+
+        /* ── Preview markdown styles ── */
+        #preview h1,#preview h2,#preview h3 { color: var(--accent); margin: 1.5rem 0 .75rem; }
+        #preview h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: .4rem; }
+        #preview h2 { font-size: 1.4em; }
+        #preview p  { margin: .75rem 0; }
+        #preview a  { color: var(--blue); }
+        #preview code {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: .1em .35em;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: .9em;
+        }
+        #preview pre {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        #preview pre code { background: none; border: none; padding: 0; }
+        #preview blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 1rem;
+            color: var(--muted);
+            margin: 1rem 0;
+        }
+        #preview ul,#preview ol { padding-left: 1.5rem; margin: .75rem 0; }
+        #preview li { margin: .3rem 0; }
+        #preview table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        #preview th,#preview td { border: 1px solid var(--border); padding: .5rem .75rem; }
+        #preview th { background: var(--surface); color: var(--accent); }
+        #preview hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+        #preview img { max-width: 100%; border-radius: 6px; }
+
+        /* ── Status bar ── */
+        .status-bar {
+            display: flex;
+            gap: 1.5rem;
+            padding: .3rem .75rem;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            font-size: .75rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+        .status-bar span.ok { color: var(--green); }
+
+        /* ── Recent files dropdown ── */
+        .recent-panel {
+            display: none;
+            position: absolute;
+            top: 2.4rem;
+            left: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            min-width: 260px;
+            box-shadow: 0 8px 24px #00000055;
+            z-index: 100;
+        }
+        .recent-panel.open { display: block; }
+        .recent-item {
+            display: block;
+            padding: .5rem 1rem;
+            font-size: .82rem;
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .recent-item:hover { background: var(--border); }
+        .recent-item.current { color: var(--accent); }
+        .recent-empty { padding: .75rem 1rem; color: var(--muted); font-size: .82rem; }
+        .tb-wrap { position: relative; }
+    </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+    <div class="toolbar-group">
+        <button class="tb-btn" onclick="newFile()" title="New (Ctrl+N)">🆕 New</button>
+        <button class="tb-btn" onclick="openFile()" title="Open (Ctrl+O)">📂 Open</button>
+        <div class="tb-wrap">
+            <button class="tb-btn" onclick="toggleRecent()" title="Recent files">🕐</button>
+            <div class="recent-panel" id="recent-panel">
+                {% if recent_files %}
+                    {% for path in recent_files %}
+                    <span class="recent-item {{ path == current_file ? 'current' : '' }}"
+                          onclick="openRecent('{{ path|e('html_attr') }}')">
+                        {{ path|split('/')|last }}
+                        <span style="color:var(--muted);font-size:.75rem;display:block">{{ path }}</span>
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    <span class="recent-empty">No recent files</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-group">
+        <button class="tb-btn" onclick="saveFile()" title="Save (Ctrl+S)">💾 Save</button>
+        <button class="tb-btn" onclick="saveAs()" title="Save As (Ctrl+Shift+S)">📝 Save As</button>
+        <button class="tb-btn" onclick="exportHtml()" title="Export as HTML">🌐 Export</button>
+    </div>
+
+    <!-- Markdown shortcuts -->
+    <div class="toolbar-group">
+        <button class="tb-btn" onclick="wrap('**','**')" title="Bold"><b>B</b></button>
+        <button class="tb-btn" onclick="wrap('*','*')"   title="Italic"><i>I</i></button>
+        <button class="tb-btn" onclick="wrap('`','`')"   title="Inline code">⌥</button>
+        <button class="tb-btn" onclick="insertLine('## ')" title="Heading">H</button>
+        <button class="tb-btn" onclick="insertLine('- ')"  title="List item">•</button>
+        <button class="tb-btn" onclick="insertLine('> ')"  title="Blockquote">❝</button>
+        <button class="tb-btn" onclick="insertLine('---\n')" title="Divider">—</button>
+    </div>
+
+    <div class="file-name" id="file-name">
+        {{ current_file ? current_file|split('/')|last : 'Untitled' }}
+    </div>
+    <div class="status-dot" id="status-dot"></div>
+</div>
+
+<!-- Split pane -->
+<div class="panes">
+    <div class="pane">
+        <div class="pane-header">MARKDOWN</div>
+        <textarea id="editor" spellcheck="false"
+                  placeholder="Start writing…">{{ content }}</textarea>
+    </div>
+    <div class="pane">
+        <div class="pane-header">PREVIEW</div>
+        <div id="preview"></div>
+    </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+    <span id="stat-words">0 words</span>
+    <span id="stat-chars">0 chars</span>
+    <span id="stat-lines">0 lines</span>
+    <span id="stat-saved" class="ok">Saved</span>
+</div>
+
+<script>
+const editor   = document.getElementById('editor');
+const preview  = document.getElementById('preview');
+const fileName = document.getElementById('file-name');
+const statusDot= document.getElementById('status-dot');
+const statSaved= document.getElementById('stat-saved');
+const recentPanel = document.getElementById('recent-panel');
+
+let currentFile = {{ current_file ? '"' ~ current_file|e('js') ~ '"' : 'null' }};
+let isDirty = false;
+let autoSaveTimer = null;
+const AUTO_SAVE = {{ preferences.auto_save ? 'true' : 'false' }};
+
+// ── Render ──────────────────────────────────────────────────────────────────
+
+function renderPreview() {
+    preview.innerHTML = marked.parse(editor.value || '');
+}
+
+function updateStats() {
+    const text  = editor.value;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    document.getElementById('stat-words').textContent = words + ' words';
+    document.getElementById('stat-chars').textContent = text.length + ' chars';
+    document.getElementById('stat-lines').textContent = text.split('\n').length + ' lines';
+}
+
+function markDirty() {
+    if (!isDirty) {
+        isDirty = true;
+        statusDot.classList.add('unsaved');
+        fileName.classList.add('unsaved');
+        statSaved.textContent = 'Unsaved changes';
+        statSaved.className   = '';
+        // Tell PHP about unsaved state (for quit guard)
+        fetch('/preferences', {
+            method: 'POST',
+            body: new URLSearchParams({ has_unsaved: '1' }),
+        });
+    }
+    if (AUTO_SAVE) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => saveFile(true), 2000);
+    }
+}
+
+function markClean() {
+    isDirty = false;
+    statusDot.classList.remove('unsaved');
+    fileName.classList.remove('unsaved');
+    statSaved.textContent = 'Saved';
+    statSaved.className   = 'ok';
+}
+
+editor.addEventListener('input', () => {
+    renderPreview();
+    updateStats();
+    markDirty();
+});
+
+// ── File operations ──────────────────────────────────────────────────────────
+
+async function post(url, params = {}) {
+    const body = new URLSearchParams(params);
+    const r    = await fetch(url, { method: 'POST', body });
+    return r.json();
+}
+
+async function newFile() {
+    if (isDirty && !confirm('Discard unsaved changes?')) return;
+    await post('/file/new');
+    editor.value  = '';
+    currentFile   = null;
+    fileName.textContent = 'Untitled';
+    renderPreview();
+    updateStats();
+    markClean();
+}
+
+async function openFile() {
+    const d = await post('/file/open');
+    if (!d.ok) return;
+    editor.value = d.content;
+    currentFile  = d.path;
+    fileName.textContent = d.path.split('/').pop();
+    renderPreview();
+    updateStats();
+    markClean();
+}
+
+async function openRecent(path) {
+    recentPanel.classList.remove('open');
+    const d = await post('/file/open', { path });
+    if (!d.ok) return;
+    editor.value = d.content;
+    currentFile  = d.path;
+    fileName.textContent = d.path.split('/').pop();
+    renderPreview();
+    updateStats();
+    markClean();
+}
+
+async function saveFile(silent = false) {
+    const d = await post('/file/save', { content: editor.value });
+    if (d.ok) {
+        currentFile = d.path;
+        fileName.textContent = d.path.split('/').pop();
+        markClean();
+    }
+}
+
+async function saveAs() {
+    const d = await post('/file/save-as', { content: editor.value });
+    if (d.ok) {
+        currentFile = d.path;
+        fileName.textContent = d.path.split('/').pop();
+        markClean();
+    }
+}
+
+async function exportHtml() {
+    await post('/file/export-html', { content: editor.value });
+}
+
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+function wrap(before, after) {
+    const start = editor.selectionStart;
+    const end   = editor.selectionEnd;
+    const sel   = editor.value.slice(start, end);
+    const replacement = before + (sel || 'text') + after;
+    editor.setRangeText(replacement, start, end, 'select');
+    editor.focus();
+    markDirty(); renderPreview();
+}
+
+function insertLine(prefix) {
+    const pos   = editor.selectionStart;
+    const lineStart = editor.value.lastIndexOf('\n', pos - 1) + 1;
+    editor.setRangeText(prefix, lineStart, lineStart, 'end');
+    editor.focus();
+    markDirty(); renderPreview();
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        e.shiftKey ? saveAs() : saveFile();
+    }
+    if (e.key === 'o' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); openFile(); }
+    if (e.key === 'n' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); newFile();  }
+});
+
+// ── Recent panel toggle ───────────────────────────────────────────────────────
+
+function toggleRecent() {
+    recentPanel.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+    if (!e.target.closest('.tb-wrap')) {
+        recentPanel.classList.remove('open');
+    }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+renderPreview();
+updateStats();
+
+// Check if a file was queued to open from the tray menu
+(async () => {
+    const r = await fetch('/pending-open');
+    const d = await r.json();
+    if (d.path) await openRecent(d.path);
+})();
+</script>
+</body>
+</html>

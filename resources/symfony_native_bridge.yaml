@@ -1,0 +1,41 @@
+# config/packages/symfony_native_bridge.yaml
+
+symfony_native_bridge:
+
+    # ── Runtime driver ────────────────────────────────────────────────────────
+    # "electron" (Node.js, easiest setup) or "tauri" (Rust, lighter binary)
+    driver: electron
+
+    # ── Application metadata ─────────────────────────────────────────────────
+    app:
+        name:        "My Symfony Desktop App"
+        version:     "1.0.0"
+        description: "An awesome native Symfony app"
+        author:      "ACME Corp"
+        identifier:  "com.acme.my-app"      # reverse-domain bundle ID
+        icon:        "%kernel.project_dir%/assets/icon.png"
+
+    # ── Default window ────────────────────────────────────────────────────────
+    window:
+        width:            1280
+        height:           800
+        min_width:        800
+        min_height:       500
+        resizable:        true
+        fullscreen:       false
+        frame:            true
+        transparent:      false
+        background_color: "#f8f9fa"
+
+    # ── Auto-Updater ─────────────────────────────────────────────────────────
+    updater:
+        enabled:    false
+        url:        ~              # https://releases.example.com/update/{{target}}/{{current_version}}
+        auto_check: true
+
+    # ── Build ─────────────────────────────────────────────────────────────────
+    build:
+        output_dir:           "dist"
+        targets:              ["current"]   # or ["windows", "macos", "linux"]
+        php_binary_embedded:  true
+        php_binary_path:      ~             # null = auto-detect system PHP

@@ -8,8 +8,7 @@ const Store = require('electron-store').default;
 // ---------------------------------------------------------------------------
 // Configuration (injectée par PHP)
 const SERVER_URL = process.env.SYMFONY_SERVER_URL || 'http://127.0.0.1:8765';
-const IPC_PORT    = parseInt(process.env.SYMFONY_IPC_PORT || '9000', 10);
-const RELOAD_PORT = IPC_PORT + 1; // port dédié au watcher hot-reload
+const IPC_PORT = parseInt(process.env.SYMFONY_IPC_PORT || '9000', 10);
 const APP_NAME   = process.env.SYMFONY_APP_NAME || 'Symfony Native App';
 
 app.setName(APP_NAME);
@@ -20,8 +19,9 @@ const windows = new Map();
 const trays   = new Map();
 const store   = new Store();
 
-let phpSocket = null;
-let wss       = null;
+let phpSocket    = null; // connexion principale PHP ↔ Electron
+const allClients = new Set(); // tous les clients connectés
+let wss          = null;
 
 // ---------------------------------------------------------------------------
 // IPC Server
@@ -37,10 +37,17 @@ function startIpcServer() {
   });
 
   wss.on('connection', (ws) => {
-    phpSocket = ws;
-    console.log(`[IPC] PHP connected on port ${IPC_PORT}`);
+    allClients.add(ws);
+    console.log(`[IPC] Client connected (total: ${allClients.size})`);
 
-    ws.send(JSON.stringify({ event: 'ipc.ready' }));
+    // Le premier client est le PHP principal
+    if (phpSocket === null) {
+      phpSocket = ws;
+      ws.send(JSON.stringify({ event: 'ipc.ready' }));
+      console.log(`[IPC] PHP main client on port ${IPC_PORT}`);
+    } else {
+      console.log(`[IPC] Hot-reload client connected`);
+    }
 
     ws.on('message', (raw) => {
       let msg;
@@ -49,32 +56,17 @@ function startIpcServer() {
     });
 
     ws.on('close', () => {
-      phpSocket = null;
-      console.log('[IPC] PHP disconnected');
-    });
-  });
-
-  console.log(`[IPC] Listening on ws://127.0.0.1:${IPC_PORT}/ipc`);
-
-  // ── Hot-reload server (port IPC+1) ────────────────────────────────────────
-  const wssReload = new WebSocketServer({ port: RELOAD_PORT, host: '127.0.0.1' });
-
-  wssReload.on('connection', (ws) => {
-    console.log(`[HotReload] Watcher connected on port ${RELOAD_PORT}`);
-
-    ws.on('message', (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw); } catch { return; }
-      // Only handle window.reloadAll from the watcher
-      if (msg.action === 'window.reloadAll') {
-        console.log('[HotReload] Reloading all windows…');
-        BrowserWindow.getAllWindows().forEach(win => win.webContents.reload());
-        ws.send(JSON.stringify({ id: msg.id, ok: true, result: null }));
+      allClients.delete(ws);
+      if (ws === phpSocket) {
+        phpSocket = null;
+        console.log('[IPC] PHP main client disconnected');
+      } else {
+        console.log('[IPC] Hot-reload client disconnected');
       }
     });
   });
 
-  console.log(`[HotReload] Listening on ws://127.0.0.1:${RELOAD_PORT}/ipc`);
+  console.log(`[IPC] Listening on ws://127.0.0.1:${IPC_PORT}/ipc`);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,8 +195,13 @@ async function handleAction(msg, ws) {
         break;
 
       case 'window.reloadAll':
-        // Hot-reload: reload all open windows
-        BrowserWindow.getAllWindows().forEach(win => win.webContents.reload());
+        // Hot-reload: attendre 150ms que PHP ait fini de traiter
+        // avant de recharger pour éviter un flash de page blanche
+        setTimeout(() => {
+          BrowserWindow.getAllWindows().forEach(win => {
+            if (!win.isDestroyed()) win.webContents.reload();
+          });
+        }, 150);
         reply(ws, id, null);
         break;
 

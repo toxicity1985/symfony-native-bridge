@@ -75,13 +75,19 @@ class NativeServeCommand extends Command
 
         $ipcPort = (int) $input->getOption('ipc-port');
 
+        $cmd = [PHP_BINARY, '-S', "{$host}:{$port}", '-t', $publicDir];
+
+        if ($routerScript) {
+            $cmd[] = $routerScript;
+        }
+
         $phpServer = new Process(
-            [PHP_BINARY, '-S', "{$host}:{$port}", '-t', $publicDir, $routerScript],
+            $cmd,
             getcwd(),
             array_merge($_SERVER, [
                 'APP_ENV'          => $_SERVER['APP_ENV'] ?? 'dev',
-                'SYMFONY_IPC_PORT' => (string) $ipcPort,   // ← IpcBridge lazy-connect reads this
-            ]),
+                'SYMFONY_IPC_PORT' => (string) $ipcPort,
+            ])
         );
         $phpServer->setTimeout(null);   // run indefinitely
         $phpServer->start();

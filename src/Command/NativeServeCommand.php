@@ -74,6 +74,18 @@ class NativeServeCommand extends Command
         }
 
         $ipcPort = (int) $input->getOption('ipc-port');
+        $cmd = [PHP_BINARY, '-S', "{$host}:{$port}", '-t', $publicDir];
+        if ($routerScript) {
+            $cmd[] = $routerScript;
+        }
+
+        $env = array_merge(
+            array_filter($_SERVER, fn($v) => is_string($v)), // ← filtrer seulement strings
+            [
+                'APP_ENV'          => $_SERVER['APP_ENV'] ?? 'dev',
+                'SYMFONY_IPC_PORT' => (string) $ipcPort,
+            ]
+        );
 
         $cmd = [PHP_BINARY, '-S', "{$host}:{$port}", '-t', $publicDir];
 
@@ -84,10 +96,7 @@ class NativeServeCommand extends Command
         $phpServer = new Process(
             $cmd,
             getcwd(),
-            array_merge($_SERVER, [
-                'APP_ENV'          => $_SERVER['APP_ENV'] ?? 'dev',
-                'SYMFONY_IPC_PORT' => (string) $ipcPort,
-            ])
+            $env
         );
         $phpServer->setTimeout(null);   // run indefinitely
         $phpServer->start();

@@ -9,6 +9,7 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use SymfonyNativeBridge\Event\AppActivatedEvent;
 use SymfonyNativeBridge\Event\AppBeforeQuitEvent;
 use SymfonyNativeBridge\Event\AppReadyEvent;
+use SymfonyNativeBridge\Event\DeepLinkReceivedEvent;
 use SymfonyNativeBridge\Event\NativeRuntimeCrashedEvent;
 use SymfonyNativeBridge\Event\NotificationClickedEvent;
 use SymfonyNativeBridge\Event\TrayClickedEvent;
@@ -54,6 +55,7 @@ class SymfonyEventBridgeIpcBridge extends IpcBridge
             'updater.update_available'   => fn(array $p) => new UpdateAvailableEvent($p['version'], $p['releaseNotes'] ?? null),
             'updater.update_downloaded'  => fn(array $p) => new UpdateDownloadedEvent($p['version']),
             'notification.clicked'       => fn(array $p) => new NotificationClickedEvent($p['title'], $p['action'] ?? null),
+            'protocol.deep_link'         => fn(array $p) => new DeepLinkReceivedEvent($p['url']),
         ];
     }
 

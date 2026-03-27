@@ -269,6 +269,21 @@ class TauriDriver implements NativeDriverInterface
     }
 
     // -------------------------------------------------------------------------
+    // Protocol Handler (Deep-links)
+    // -------------------------------------------------------------------------
+
+    public function registerProtocol(string $scheme): void
+    {
+        // Tauri uses tauri-plugin-deep-link
+        $this->ipcBridge->send('protocol.register', ['scheme' => $scheme]);
+    }
+
+    public function unregisterProtocol(string $scheme): void
+    {
+        $this->ipcBridge->send('protocol.unregister', ['scheme' => $scheme]);
+    }
+
+    // -------------------------------------------------------------------------
     // Auto-Updater
     // -------------------------------------------------------------------------
 

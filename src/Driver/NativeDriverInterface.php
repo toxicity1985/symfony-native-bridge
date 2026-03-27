@@ -184,6 +184,22 @@ interface NativeDriverInterface
     public function storeDelete(string $key): void;
 
     // -------------------------------------------------------------------------
+    // Protocol Handler (Deep-links)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Register a custom URL scheme as the OS default handler for this app.
+     * After registration, clicking e.g. myapp:// links will launch this app
+     * and fire a DeepLinkReceivedEvent via the IPC bridge.
+     */
+    public function registerProtocol(string $scheme): void;
+
+    /**
+     * Remove the custom URL scheme registration for this app.
+     */
+    public function unregisterProtocol(string $scheme): void;
+
+    // -------------------------------------------------------------------------
     // Auto-Updater
     // -------------------------------------------------------------------------
 

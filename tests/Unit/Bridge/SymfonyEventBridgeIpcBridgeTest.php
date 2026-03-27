@@ -15,6 +15,7 @@ use SymfonyNativeBridge\Event\WindowFocusedEvent;
 use SymfonyNativeBridge\Event\WindowResizedEvent;
 use SymfonyNativeBridge\Event\UpdateAvailableEvent;
 use SymfonyNativeBridge\Event\AppBeforeQuitEvent;
+use SymfonyNativeBridge\Event\DeepLinkReceivedEvent;
 
 /**
  * Tests that push messages from the native runtime are correctly
@@ -117,6 +118,25 @@ class SymfonyEventBridgeIpcBridgeTest extends TestCase
 
         $this->assertSame('2.0.0', $received->version);
         $this->assertSame('Bug fixes', $received->releaseNotes);
+    }
+
+    public function testDeepLinkEventIsDispatchedWithParsedUrl(): void
+    {
+        $received = null;
+        $this->dispatcher->addListener(DeepLinkReceivedEvent::NAME, function (DeepLinkReceivedEvent $e) use (&$received) {
+            $received = $e;
+        });
+
+        $this->bridge->simulatePush([
+            'event'   => 'protocol.deep_link',
+            'payload' => ['url' => 'myapp://dashboard?ref=email'],
+        ]);
+
+        $this->assertInstanceOf(DeepLinkReceivedEvent::class, $received);
+        $this->assertSame('myapp://dashboard?ref=email', $received->url);
+        $this->assertSame('myapp', $received->scheme);
+        $this->assertSame('dashboard', $received->host);
+        $this->assertSame(['ref' => 'email'], $received->query);
     }
 
     public function testUnknownEventIsIgnoredSilently(): void

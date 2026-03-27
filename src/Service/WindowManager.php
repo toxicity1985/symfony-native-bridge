@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace SymfonyNativeBridge\Service;
 
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use SymfonyNativeBridge\Attribute\AsNativeListener;
 use SymfonyNativeBridge\Driver\NativeDriverInterface;
 use SymfonyNativeBridge\Event\WindowClosedEvent;
+use SymfonyNativeBridge\Exception\NativeException;
 use SymfonyNativeBridge\ValueObject\WindowOptions;
 
 class WindowManager
@@ -15,8 +17,10 @@ class WindowManager
     private array $windows = [];
 
     public function __construct(
-        private readonly NativeDriverInterface $driver,
-        private readonly array $defaultConfig,
+        private readonly NativeDriverInterface  $driver,
+        private readonly array                  $defaultConfig,
+        private readonly ?NativeRouteRegistry   $routeRegistry = null,
+        private readonly ?UrlGeneratorInterface $urlGenerator  = null,
     ) {}
 
     public function open(string $url, ?WindowOptions $options = null): string
@@ -91,6 +95,40 @@ class WindowManager
             $this->windows,
             fn(string $id) => $id !== $event->windowId,
         );
+    }
+
+    /**
+     * Opens a native window by its #[NativeRoute] name.
+     *
+     * The Symfony route is resolved to an absolute URL via the UrlGenerator,
+     * then merged with the window options declared on the attribute.
+     * Pass $override to fully replace the attribute options at call site.
+     *
+     * @param array<string, mixed> $parameters Route parameters forwarded to the UrlGenerator
+     * @throws NativeException When the native route name is unknown
+     * @throws \LogicException When the bundle is not configured with the router service
+     */
+    public function openRoute(string $name, array $parameters = [], ?WindowOptions $override = null): string
+    {
+        if ($this->routeRegistry === null || $this->urlGenerator === null) {
+            throw new \LogicException(
+                'openRoute() requires symfony/routing. Make sure the router service is available.'
+            );
+        }
+
+        ['route' => $routeName, 'options' => $optionsOverrides] = $this->routeRegistry->get($name);
+
+        $url = $this->urlGenerator->generate($routeName, $parameters, UrlGeneratorInterface::ABSOLUTE_URL);
+
+        if ($override !== null) {
+            return $this->open($url, $override);
+        }
+
+        // Merge attribute overrides on top of the bundle defaults
+        $merged  = $optionsOverrides + $this->defaultConfig;
+        $options = WindowOptions::fromArray($merged);
+
+        return $this->open($url, $options);
     }
 
     /**

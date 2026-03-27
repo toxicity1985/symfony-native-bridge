@@ -362,6 +362,20 @@ async function handleAction(msg, ws) {
 
         // ── Store ─────────────────────────────────────────────────────────────
 
+        // ── Protocol Handler ──────────────────────────────────────────────────
+
+      case 'protocol.register':
+        app.setAsDefaultProtocolClient(payload.scheme);
+        reply(ws, id, null);
+        break;
+
+      case 'protocol.unregister':
+        app.removeAsDefaultProtocolClient(payload.scheme);
+        reply(ws, id, null);
+        break;
+
+        // ── Store ─────────────────────────────────────────────────────────────
+
       case 'store.get':
         reply(ws, id, store.get(payload.key, null));
         break;
@@ -385,6 +399,38 @@ async function handleAction(msg, ws) {
     replyError(ws, id, err.message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Deep-link / Protocol handler
+//
+// On Windows & Linux a second instance is launched with the URL in argv.
+// requestSingleInstanceLock() ensures only one instance runs; the second
+// instance passes its argv to the first via the 'second-instance' event.
+//
+// On macOS the OS sends 'open-url' directly to the running instance.
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another instance is already running — it will receive our argv via
+  // 'second-instance'. Exit this extra instance immediately.
+  app.quit();
+}
+
+app.on('second-instance', (_event, argv) => {
+  // Windows / Linux: the deep-link URL is the last argument that contains '://'
+  const url = argv.find(arg => arg.includes('://'));
+  if (url) pushEvent('protocol.deep_link', { url });
+
+  // Bring the main window to the front
+  const win = windows.get('main') || BrowserWindow.getAllWindows()[0];
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+});
+
+app.on('open-url', (event, url) => {
+  // macOS: fired when the OS routes a custom-scheme URL to this app
+  event.preventDefault();
+  pushEvent('protocol.deep_link', { url });
+});
 
 // ---------------------------------------------------------------------------
 // App lifecycle

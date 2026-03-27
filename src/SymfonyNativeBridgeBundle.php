@@ -7,6 +7,7 @@ namespace SymfonyNativeBridge;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use SymfonyNativeBridge\DependencyInjection\NativeListenerPass;
+use SymfonyNativeBridge\DependencyInjection\NativeRoutePass;
 use SymfonyNativeBridge\DependencyInjection\SymfonyNativeBridgeExtension;
 
 class SymfonyNativeBridgeBundle extends AbstractBundle
@@ -20,5 +21,6 @@ class SymfonyNativeBridgeBundle extends AbstractBundle
     {
         parent::build($container);
         $container->addCompilerPass(new NativeListenerPass());
+        $container->addCompilerPass(new NativeRoutePass());
     }
 }

@@ -115,10 +115,16 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
             ->arg('$config', $config)
             ->public();
 
+        // Native route registry (populated at compile time by NativeRoutePass)
+        $services->set(\SymfonyNativeBridge\Service\NativeRouteRegistry::class)
+            ->public();
+
         // Services
         $services->set(\SymfonyNativeBridge\Service\WindowManager::class)
             ->arg('$driver', service(NativeDriverInterface::class))
             ->arg('$defaultConfig', $config['window'])
+            ->arg('$routeRegistry', service(\SymfonyNativeBridge\Service\NativeRouteRegistry::class)->nullOnInvalid())
+            ->arg('$urlGenerator', service('router')->nullOnInvalid())
             ->public();
 
         $services->set(\SymfonyNativeBridge\Service\TrayManager::class)
@@ -140,6 +146,10 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
             ->public();
 
         $services->set(\SymfonyNativeBridge\Service\StorageManager::class)
+            ->arg('$driver', service(NativeDriverInterface::class))
+            ->public();
+
+        $services->set(\SymfonyNativeBridge\Service\ProtocolManager::class)
             ->arg('$driver', service(NativeDriverInterface::class))
             ->public();
 

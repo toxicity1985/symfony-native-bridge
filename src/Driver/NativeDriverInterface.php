@@ -184,6 +184,37 @@ interface NativeDriverInterface
     public function storeDelete(string $key): void;
 
     // -------------------------------------------------------------------------
+    // Clipboard
+    // -------------------------------------------------------------------------
+
+    /**
+     * Read plain text from the system clipboard. Returns null when the
+     * clipboard is empty or does not contain text.
+     */
+    public function clipboardReadText(): ?string;
+
+    /**
+     * Write plain text to the system clipboard.
+     */
+    public function clipboardWriteText(string $text): void;
+
+    /**
+     * Read an image from the system clipboard.
+     * Returns a base64-encoded PNG string, or null if no image is present.
+     */
+    public function clipboardReadImage(): ?string;
+
+    /**
+     * Copy a local image file into the system clipboard.
+     */
+    public function clipboardWriteImage(string $path): void;
+
+    /**
+     * Clear the system clipboard.
+     */
+    public function clipboardClear(): void;
+
+    // -------------------------------------------------------------------------
     // Protocol Handler (Deep-links)
     // -------------------------------------------------------------------------
 

@@ -269,6 +269,38 @@ class TauriDriver implements NativeDriverInterface
     }
 
     // -------------------------------------------------------------------------
+    // Clipboard
+    // -------------------------------------------------------------------------
+
+    public function clipboardReadText(): ?string
+    {
+        // Tauri uses tauri-plugin-clipboard-manager
+        $result = $this->ipcBridge->call('clipboard.readText');
+        return is_string($result) && $result !== '' ? $result : null;
+    }
+
+    public function clipboardWriteText(string $text): void
+    {
+        $this->ipcBridge->send('clipboard.writeText', ['text' => $text]);
+    }
+
+    public function clipboardReadImage(): ?string
+    {
+        $result = $this->ipcBridge->call('clipboard.readImage');
+        return is_string($result) && $result !== '' ? $result : null;
+    }
+
+    public function clipboardWriteImage(string $path): void
+    {
+        $this->ipcBridge->send('clipboard.writeImage', ['path' => $path]);
+    }
+
+    public function clipboardClear(): void
+    {
+        $this->ipcBridge->send('clipboard.clear');
+    }
+
+    // -------------------------------------------------------------------------
     // Protocol Handler (Deep-links)
     // -------------------------------------------------------------------------
 

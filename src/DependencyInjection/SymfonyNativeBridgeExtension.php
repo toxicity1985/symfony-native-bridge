@@ -153,6 +153,10 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
             ->arg('$driver', service(NativeDriverInterface::class))
             ->public();
 
+        $services->set(\SymfonyNativeBridge\Service\ClipboardManager::class)
+            ->arg('$driver', service(NativeDriverInterface::class))
+            ->public();
+
         // Commands
         $services->set(\SymfonyNativeBridge\Command\NativeServeCommand::class)
             ->arg('$driver',     service(NativeDriverInterface::class))

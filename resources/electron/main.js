@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, Notification, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, dialog, shell, clipboard, nativeImage } = require('electron');
 const { WebSocketServer, WebSocket } = require('ws');
 const path = require('path');
 const Store = require('electron-store').default;
@@ -361,6 +361,39 @@ async function handleAction(msg, ws) {
         break;
 
         // ── Store ─────────────────────────────────────────────────────────────
+
+        // ── Clipboard ─────────────────────────────────────────────────────────
+
+      case 'clipboard.readText':
+        reply(ws, id, clipboard.readText() || null);
+        break;
+
+      case 'clipboard.writeText':
+        clipboard.writeText(payload.text ?? '');
+        reply(ws, id, null);
+        break;
+
+      case 'clipboard.readImage': {
+        const img = clipboard.readImage();
+        reply(ws, id, img.isEmpty() ? null : img.toPNG().toString('base64'));
+        break;
+      }
+
+      case 'clipboard.writeImage': {
+        const fs = require('fs');
+        if (!fs.existsSync(payload.path)) {
+          replyError(ws, id, `File not found: ${payload.path}`);
+          break;
+        }
+        clipboard.writeImage(nativeImage.createFromPath(payload.path));
+        reply(ws, id, null);
+        break;
+      }
+
+      case 'clipboard.clear':
+        clipboard.clear();
+        reply(ws, id, null);
+        break;
 
         // ── Protocol Handler ──────────────────────────────────────────────────
 

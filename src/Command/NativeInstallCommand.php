@@ -54,6 +54,11 @@ class NativeInstallCommand extends Command
             return;
         }
 
+        // Check Node.js version >= 18
+        if (!$this->checkNodeVersion($io, 18)) {
+            return;
+        }
+
         $packageJsonPath = $this->projectDir . '/package.json';
 
         if (!file_exists($packageJsonPath) || $force) {
@@ -155,6 +160,11 @@ class NativeInstallCommand extends Command
             return;
         }
 
+        // Check Node.js version >= 18
+        if (!$this->checkNodeVersion($io, 18)) {
+            return;
+        }
+
         $io->text('Installing @tauri-apps/cli via npm…');
 
         $process = new Process(['npm', 'install', '--save-dev', '@tauri-apps/cli']);
@@ -185,5 +195,32 @@ class NativeInstallCommand extends Command
         $which = PHP_OS_FAMILY === 'Windows' ? 'where' : 'which';
 
         return (new Process([$which, $command]))->run() === 0;
+    }
+
+    private function checkNodeVersion(SymfonyStyle $io, int $minMajor): bool
+    {
+        $process = new Process(['node', '--version']);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            $io->error('Could not determine Node.js version. Make sure Node.js is installed and in your PATH.');
+            return false;
+        }
+
+        // Output is "v18.12.0\n" — strip the leading "v"
+        $version = ltrim(trim($process->getOutput()), 'v');
+        $major   = (int) explode('.', $version)[0];
+
+        if ($major < $minMajor) {
+            $io->error(sprintf(
+                'Node.js %d+ is required, but found v%s. Please upgrade: https://nodejs.org',
+                $minMajor,
+                $version,
+            ));
+            return false;
+        }
+
+        $io->text(sprintf('Node.js v%s detected <info>✓</info>', $version));
+        return true;
     }
 }

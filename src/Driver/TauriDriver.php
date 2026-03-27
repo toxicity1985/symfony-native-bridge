@@ -125,6 +125,11 @@ class TauriDriver implements NativeDriverInterface
         $this->ipcBridge->send('tray.destroy', ['trayId' => $trayId]);
     }
 
+    public function listTrays(): array
+    {
+        return (array) $this->ipcBridge->call('tray.list');
+    }
+
     // -------------------------------------------------------------------------
     // Notifications
     // -------------------------------------------------------------------------
@@ -188,7 +193,7 @@ class TauriDriver implements NativeDriverInterface
             'buttons' => $buttons,
         ]);
 
-        return (int) ($result ?? 0);
+        return is_int($result) ? $result : (int) ($result ?? 0);
     }
 
     // -------------------------------------------------------------------------

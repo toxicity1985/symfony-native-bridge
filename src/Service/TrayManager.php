@@ -45,6 +45,28 @@ class TrayManager
         unset($this->trays[$label]);
     }
 
+    /**
+     * Re-synchronise in-memory state with the native runtime.
+     *
+     * Call this in your AppReadyEvent listener after a hot-reload or when the
+     * PHP process restarts while Electron stays alive. Trays that were created
+     * before the restart will be tracked again using their ID as label (since
+     * original labels are PHP-only and cannot be recovered).
+     *
+     * Already-tracked trays are preserved as-is.
+     */
+    public function syncFromRuntime(): void
+    {
+        $runtimeIds = $this->driver->listTrays();
+        $trackedIds = array_values($this->trays);
+
+        foreach ($runtimeIds as $trayId) {
+            if (!in_array($trayId, $trackedIds, true)) {
+                $this->trays[$trayId] = $trayId;
+            }
+        }
+    }
+
     private function resolve(string $label): string
     {
         if (!isset($this->trays[$label])) {

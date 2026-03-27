@@ -11,6 +11,7 @@ use SymfonyNativeBridge\Bridge\SymfonyEventBridgeIpcBridge;
 use SymfonyNativeBridge\Driver\NativeDriverInterface;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service_closure;
 
 class SymfonyNativeBridgeExtension extends AbstractExtension
 {
@@ -27,6 +28,10 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
                     ->values(['electron', 'tauri'])
                     ->defaultValue('electron')
                     ->info('The native runtime driver to use (electron or tauri)')
+                ->end()
+                ->booleanNode('strict')
+                    ->defaultFalse()
+                    ->info('When true, throws typed exceptions instead of silent null when runtime is absent or crashed')
                 ->end()
                 ->arrayNode('app')
                     ->addDefaultsIfNotSet()
@@ -92,6 +97,8 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
         $services->set(SymfonyEventBridgeIpcBridge::class)
             ->arg('$driver', $config['driver'])
             ->arg('$eventDispatcher', service('event_dispatcher'))
+            ->arg('$logger', service('logger')->nullOnInvalid())
+            ->arg('$strict', $config['strict'])
             ->public()
         ;
 
@@ -142,6 +149,7 @@ class SymfonyNativeBridgeExtension extends AbstractExtension
             ->arg('$driver',     service(NativeDriverInterface::class))
             ->arg('$appConfig',  $config['app'])
             ->arg('$ipcBridge',  service(\SymfonyNativeBridge\Bridge\SymfonyEventBridgeIpcBridge::class))
+            ->arg('$logger',     service('logger')->nullOnInvalid())
             ->tag('console.command');
 
         $services->set(\SymfonyNativeBridge\Command\NativeBuildCommand::class)

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: [ "8.2", "8.3", "8.4" ]
+        symfony: [ "6.4.*", "7.2.*", "8.0.*" ]
+        exclude:
+          # Symfony 8 requires PHP 8.3+
+          - php: "8.2"
+            symfony: "8.0.*"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, json, libxml, mbstring, tokenizer, xml, xmlwriter, pcntl, posix
+          coverage: none
+
+      - name: Constrain Symfony version
+        run: |
+          composer require \
+            "symfony/framework-bundle:${{ matrix.symfony }}" \
+            "symfony/console:${{ matrix.symfony }}" \
+            "symfony/event-dispatcher:${{ matrix.symfony }}" \
+            "symfony/process:${{ matrix.symfony }}" \
+            --no-update --no-interaction
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Run unit tests
+        run: vendor/bin/phpunit --testsuite Unit --no-coverage
+
+      - name: Run integration tests
+        run: vendor/bin/phpunit --testsuite Integration --no-coverage
+
+  static-analysis:
+    name: Syntax check (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php: [ "8.2", "8.4" ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring
+
+      - name: Check syntax
+        run: find src tests -name "*.php" | xargs -I{} php -l {}

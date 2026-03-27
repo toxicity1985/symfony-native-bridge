@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SymfonyNativeBridge\HotReload;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use SymfonyNativeBridge\Bridge\IpcBridge;
 
 /**
@@ -20,12 +22,17 @@ class HotReloadWatcher
     /** @var array<string, int> path => mtime */
     private array $snapshots = [];
 
+    private readonly LoggerInterface $logger;
+
     public function __construct(
         private readonly IpcBridge $ipcBridge,
         private readonly string    $projectDir,
         private readonly array     $watchDirs  = ['src', 'templates', 'config'],
         private readonly array     $ignoreDirs = ['var', 'vendor', 'node_modules', '.git'],
-    ) {}
+        ?LoggerInterface           $logger = null,
+    ) {
+        $this->logger = $logger ?? new NullLogger();
+    }
 
     /**
      * Prendre le snapshot initial — appeler une fois avant la boucle.
@@ -33,7 +40,9 @@ class HotReloadWatcher
     public function init(): void
     {
         $this->snapshots = $this->snapshot();
-        echo "[HotReload] Watching " . implode(', ', $this->watchDirs) . "…\n";
+        $this->logger->debug('[HotReload] Watching {dirs}', [
+            'dirs' => implode(', ', $this->watchDirs),
+        ]);
     }
 
     /**
@@ -50,7 +59,7 @@ class HotReloadWatcher
 
         foreach ($changed as $file) {
             $rel = str_replace($this->projectDir . '/', '', $file);
-            echo "[HotReload] Changed: {$rel}\n";
+            $this->logger->info('[HotReload] Changed: {file}', ['file' => $rel]);
         }
 
         // Invalider l'opcache pour les fichiers PHP modifiés

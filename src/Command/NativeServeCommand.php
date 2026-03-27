@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SymfonyNativeBridge\Command;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -11,8 +13,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Process;
-use SymfonyNativeBridge\Driver\NativeDriverInterface;
 use SymfonyNativeBridge\Bridge\IpcBridge;
+use SymfonyNativeBridge\Driver\NativeDriverInterface;
 use SymfonyNativeBridge\HotReload\HotReloadWatcher;
 
 // =============================================================================
@@ -29,6 +31,7 @@ class NativeServeCommand extends Command
         private readonly NativeDriverInterface $driver,
         private readonly array                 $appConfig,
         private readonly IpcBridge             $ipcBridge,
+        private readonly LoggerInterface       $logger = new NullLogger(),
     ) {
         parent::__construct();
     }
@@ -145,12 +148,13 @@ class NativeServeCommand extends Command
         if ($hotReload) {
             // Créer une instance IpcBridge DÉDIÉE pour le watcher
             // (le driver occupe déjà la connexion principale)
-            $watcherBridge = new \SymfonyNativeBridge\Bridge\IpcBridge('electron');
+            $watcherBridge = $this->ipcBridge->createCompanion();
             try {
                 $watcherBridge->connect("ws://127.0.0.1:{$ipcPort}/ipc");
                 $watcher = new HotReloadWatcher(
                     ipcBridge:  $watcherBridge,
                     projectDir: getcwd(),
+                    logger:     $this->logger,
                 );
                 $watcher->init();
                 $io->text('Hot-reload active — watching <info>src/</info>, <info>templates/</info>, <info>config/</info>');

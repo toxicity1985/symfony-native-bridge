@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace SymfonyNativeBridge\Driver;
 
+use Symfony\Component\Process\Process;
 use SymfonyNativeBridge\Bridge\IpcBridge;
 use SymfonyNativeBridge\Exception\NativeException;
 use SymfonyNativeBridge\ValueObject\DialogOptions;
@@ -26,7 +27,8 @@ use SymfonyNativeBridge\ValueObject\WindowOptions;
  */
 class TauriDriver implements NativeDriverInterface
 {
-    private ?int $pid = null;
+    private ?Process $tauriProcess = null;
+    private ?int     $pid          = null;
 
     public function __construct(
         private readonly IpcBridge $ipcBridge,
@@ -125,6 +127,11 @@ class TauriDriver implements NativeDriverInterface
         $this->ipcBridge->send('tray.destroy', ['trayId' => $trayId]);
     }
 
+    public function listTrays(): array
+    {
+        return (array) $this->ipcBridge->call('tray.list');
+    }
+
     // -------------------------------------------------------------------------
     // Notifications
     // -------------------------------------------------------------------------
@@ -133,10 +140,10 @@ class TauriDriver implements NativeDriverInterface
     {
         // Tauri uses tauri-plugin-notification
         $this->ipcBridge->send('notification.send', [
-            'title'    => $options->title,
-            'body'     => $options->body,
-            'icon'     => $options->icon,
-            'sound'    => $options->sound,
+            'title' => $options->title,
+            'body'  => $options->body,
+            'icon'  => $options->icon,
+            'sound' => $options->sound,
         ]);
     }
 
@@ -174,7 +181,6 @@ class TauriDriver implements NativeDriverInterface
 
     public function showMessageBox(string $title, string $message, array $buttons = ['OK'], string $type = 'info'): int
     {
-        // Tauri dialog.message / dialog.ask / dialog.confirm
         $kind = match ($type) {
             'warning' => 'warning',
             'error'   => 'error',
@@ -188,7 +194,7 @@ class TauriDriver implements NativeDriverInterface
             'buttons' => $buttons,
         ]);
 
-        return (int) ($result ?? 0);
+        return is_int($result) ? $result : (int) ($result ?? 0);
     }
 
     // -------------------------------------------------------------------------
@@ -207,15 +213,15 @@ class TauriDriver implements NativeDriverInterface
 
     public function getPath(string $name): string
     {
-        // Tauri uses path.appDataDir, path.homeDir, etc.
+        // Map Electron path names to Tauri equivalents
         $tauriPathMap = [
-            'home'     => 'homeDir',
-            'appData'  => 'appDataDir',
-            'userData' => 'appLocalDataDir',
-            'desktop'  => 'desktopDir',
-            'documents'=> 'documentDir',
-            'downloads'=> 'downloadDir',
-            'temp'     => 'tempDir',
+            'home'      => 'homeDir',
+            'appData'   => 'appDataDir',
+            'userData'  => 'appLocalDataDir',
+            'desktop'   => 'desktopDir',
+            'documents' => 'documentDir',
+            'downloads' => 'downloadDir',
+            'temp'      => 'tempDir',
         ];
 
         $tauriName = $tauriPathMap[$name] ?? $name;
@@ -282,49 +288,67 @@ class TauriDriver implements NativeDriverInterface
 
     public function start(string $serverUrl, array $config): int
     {
-        $tauriBin  = $this->resolveTauriBinary();
-        $pipePath  = $this->resolvePipePath();
+        $tauriBin = $this->resolveTauriBinary();
+        $pipePath = $this->resolvePipePath();
 
-        $env = array_merge(getenv(), [
+        // Generate a session token so Tauri can reject unauthorised pipe connections
+        $ipcToken = bin2hex(random_bytes(16));
+
+        $env = array_merge(getenv() ?: [], [
             'SYMFONY_SERVER_URL' => $serverUrl,
             'SYMFONY_IPC_PIPE'   => $pipePath,
+            'SYMFONY_IPC_TOKEN'  => $ipcToken,
             'SYMFONY_APP_NAME'   => $config['app']['name'] ?? 'Symfony App',
         ]);
 
-        $cmd        = escapeshellarg($tauriBin) . ' dev';
-        $descriptor = [
-            0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
-            2 => ['pipe', 'w'],
-        ];
+        $process = new Process([$tauriBin, 'dev'], null, $env);
+        $process->setTimeout(null);
+        $process->start();
 
-        $process   = proc_open($cmd, $descriptor, $pipes, null, $env);
-        $status    = proc_get_status($process);
-        $this->pid = $status['pid'];
+        $this->tauriProcess = $process;
+        $this->pid          = $process->getPid();
 
-        // Wait for Tauri to create the pipe
+        // Wait for Tauri to create the named pipe (max 10s)
         $waited = 0;
-        while (!file_exists($pipePath) && $waited < 10000) {
+        while (!file_exists($pipePath) && $waited < 10_000) {
+            if (!$process->isRunning()) {
+                throw new NativeException(
+                    "Tauri process exited before creating the IPC pipe.\n" .
+                    $process->getErrorOutput()
+                );
+            }
             usleep(100_000);
             $waited += 100;
         }
 
         if (!file_exists($pipePath)) {
-            throw new NativeException("Tauri IPC pipe not created at {$pipePath} after 10s");
+            $process->stop(3);
+            throw new NativeException(
+                "Tauri IPC pipe not created at {$pipePath} after 10s.\n" .
+                $process->getErrorOutput()
+            );
         }
 
-        $this->ipcBridge->connect($pipePath);
+        $this->ipcBridge->connect($pipePath, $ipcToken);
 
-        return $this->pid;
+        return $this->pid ?? 0;
     }
 
     public function stop(): void
     {
         $this->ipcBridge->disconnect();
 
-        if ($this->pid !== null) {
-            posix_kill($this->pid, SIGTERM);
-            $this->pid = null;
+        if ($this->tauriProcess !== null && $this->tauriProcess->isRunning()) {
+            $this->tauriProcess->stop(3);
+            $this->tauriProcess = null;
+        }
+
+        $this->pid = null;
+
+        // Clean up the pipe file on Unix
+        $pipePath = $this->resolvePipePath();
+        if (PHP_OS_FAMILY !== 'Windows' && file_exists($pipePath)) {
+            @unlink($pipePath);
         }
     }
 
@@ -333,17 +357,23 @@ class TauriDriver implements NativeDriverInterface
         $tauriBin = $this->resolveTauriBinary();
         $targets  = $buildConfig['targets'] ?? ['current'];
 
-        // Tauri build targets are set in tauri.conf.json, but we can pass --target for cross-compilation
-        $targetFlag = '';
+        $cmd = [$tauriBin, 'build'];
+
+        // Pass explicit target only for cross-compilation (single target supported by Tauri CLI)
         if ($targets !== ['current'] && count($targets) === 1) {
-            $targetFlag = '--target ' . escapeshellarg($targets[0]);
+            $cmd[] = '--target';
+            $cmd[] = $targets[0];
         }
 
-        $cmd = sprintf('%s build %s', escapeshellarg($tauriBin), $targetFlag);
-        passthru($cmd, $exitCode);
+        $process = new Process($cmd, getcwd());
+        $process->setTimeout(600); // builds can be slow
+        $process->run(fn(string $type, string $buffer) => print($buffer));
 
-        if ($exitCode !== 0) {
-            throw new NativeException("tauri build failed with exit code {$exitCode}");
+        if (!$process->isSuccessful()) {
+            throw new NativeException(
+                "tauri build failed with exit code {$process->getExitCode()}\n" .
+                $process->getErrorOutput()
+            );
         }
     }
 
@@ -361,6 +391,7 @@ class TauriDriver implements NativeDriverInterface
         $candidates = [
             getcwd() . '/node_modules/.bin/tauri',
             getcwd() . '/node_modules/.bin/tauri.cmd',
+            // cargo-tauri installed globally via `cargo install tauri-cli`
             trim((string) shell_exec('which cargo-tauri 2>/dev/null')),
         ];
 

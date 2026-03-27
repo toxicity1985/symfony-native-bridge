@@ -114,6 +114,11 @@ class ElectronDriver implements NativeDriverInterface
         $this->ipcBridge->send('tray.destroy', ['trayId' => $trayId]);
     }
 
+    public function listTrays(): array
+    {
+        return (array) $this->ipcBridge->call('tray.list');
+    }
+
     // -------------------------------------------------------------------------
     // Notifications
     // -------------------------------------------------------------------------
@@ -144,11 +149,17 @@ class ElectronDriver implements NativeDriverInterface
             'buttonLabel' => $options->buttonLabel,
         ], fn($v) => $v !== null && $v !== []));
 
+        if (!is_array($result)) {
+            return null;
+        }
+
         if ($result['canceled'] ?? false) {
             return null;
         }
 
-        return $result['filePaths'] ?? null;
+        $paths = $result['filePaths'] ?? null;
+
+        return is_array($paths) ? $paths : null;
     }
 
     public function showSaveDialog(DialogOptions $options): ?string
@@ -160,11 +171,17 @@ class ElectronDriver implements NativeDriverInterface
             'buttonLabel' => $options->buttonLabel,
         ], fn($v) => $v !== null && $v !== []));
 
+        if (!is_array($result)) {
+            return null;
+        }
+
         if ($result['canceled'] ?? false) {
             return null;
         }
 
-        return $result['filePath'] ?? null;
+        $path = $result['filePath'] ?? null;
+
+        return is_string($path) ? $path : null;
     }
 
     public function showMessageBox(string $title, string $message, array $buttons = ['OK'], string $type = 'info'): int
@@ -175,6 +192,10 @@ class ElectronDriver implements NativeDriverInterface
             'message' => $message,
             'buttons' => $buttons,
         ], fn($v) => $v !== null));
+
+        if (!is_array($result)) {
+            return 0;
+        }
 
         return (int) ($result['response'] ?? 0);
     }
@@ -261,9 +282,15 @@ class ElectronDriver implements NativeDriverInterface
         $mainJsPath  = $this->resolveMainJs();
         $ipcPort     = $config['ipc_port'] ?? 9000;
 
+        // Generate a fresh random token for this session.
+        // Electron will reject WebSocket connections that don't present this token,
+        // preventing other local processes from hijacking the IPC channel.
+        $ipcToken = bin2hex(random_bytes(16));
+
         $env = array_merge(getenv() ?: [], [
             'SYMFONY_SERVER_URL' => $serverUrl,
             'SYMFONY_IPC_PORT'   => (string) $ipcPort,
+            'SYMFONY_IPC_TOKEN'  => $ipcToken,
             'SYMFONY_APP_NAME'   => $config['app']['name'] ?? 'Symfony App',
             'ELECTRON_NO_ASAR'   => '1',
         ]);
@@ -302,7 +329,7 @@ class ElectronDriver implements NativeDriverInterface
             );
         }
 
-        $this->ipcBridge->connect("ws://127.0.0.1:{$ipcPort}/ipc");
+        $this->ipcBridge->connect("ws://127.0.0.1:{$ipcPort}/ipc", $ipcToken);
 
         return $this->pid ?? 0;
     }

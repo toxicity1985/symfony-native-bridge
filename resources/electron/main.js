@@ -7,9 +7,10 @@ const Store = require('electron-store').default;
 
 // ---------------------------------------------------------------------------
 // Configuration (injectée par PHP)
-const SERVER_URL = process.env.SYMFONY_SERVER_URL || 'http://127.0.0.1:8765';
-const IPC_PORT = parseInt(process.env.SYMFONY_IPC_PORT || '9000', 10);
-const APP_NAME   = process.env.SYMFONY_APP_NAME || 'Symfony Native App';
+const SERVER_URL  = process.env.SYMFONY_SERVER_URL || 'http://127.0.0.1:8765';
+const IPC_PORT    = parseInt(process.env.SYMFONY_IPC_PORT || '9000', 10);
+const IPC_TOKEN   = process.env.SYMFONY_IPC_TOKEN || null; // null = auth disabled
+const APP_NAME    = process.env.SYMFONY_APP_NAME || 'Symfony Native App';
 
 app.setName(APP_NAME);
 
@@ -36,7 +37,19 @@ function startIpcServer() {
     }
   });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // Token validation — reject connections that don't present the correct secret.
+    // IPC_TOKEN is null when native:serve is run without token injection (dev fallback).
+    if (IPC_TOKEN !== null) {
+      const params = new URLSearchParams(req.url.replace(/^[^?]*/, ''));
+      const clientToken = params.get('token');
+      if (clientToken !== IPC_TOKEN) {
+        console.warn('[IPC] Rejected connection: invalid or missing token');
+        ws.close(4401, 'Unauthorized');
+        return;
+      }
+    }
+
     allClients.add(ws);
     console.log(`[IPC] Client connected (total: ${allClients.size})`);
 
@@ -249,6 +262,10 @@ async function handleAction(msg, ws) {
         trays.get(payload.trayId)?.destroy();
         trays.delete(payload.trayId);
         reply(ws, id, null);
+        break;
+
+      case 'tray.list':
+        reply(ws, id, Array.from(trays.keys()));
         break;
 
         // ── Notifications ─────────────────────────────────────────────────────

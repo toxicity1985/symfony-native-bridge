@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace SymfonyNativeBridge\Bridge;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use SymfonyNativeBridge\Event\AppActivatedEvent;
 use SymfonyNativeBridge\Event\AppBeforeQuitEvent;
 use SymfonyNativeBridge\Event\AppReadyEvent;
+use SymfonyNativeBridge\Event\NativeRuntimeCrashedEvent;
 use SymfonyNativeBridge\Event\NotificationClickedEvent;
 use SymfonyNativeBridge\Event\TrayClickedEvent;
 use SymfonyNativeBridge\Event\TrayMenuItemClickedEvent;
@@ -33,8 +35,10 @@ class SymfonyEventBridgeIpcBridge extends IpcBridge
     public function __construct(
         string $driver,
         private readonly EventDispatcherInterface $eventDispatcher,
+        ?LoggerInterface $logger = null,
+        bool $strict = false,
     ) {
-        parent::__construct($driver);
+        parent::__construct($driver, false, $logger, $strict);
 
         $this->eventMap = [
             'window.focused'              => fn(array $p) => new WindowFocusedEvent($p['windowId']),
@@ -53,6 +57,11 @@ class SymfonyEventBridgeIpcBridge extends IpcBridge
         ];
     }
 
+    public function createCompanion(): static
+    {
+        return new static($this->driver, $this->eventDispatcher, $this->logger, $this->strict);
+    }
+
     protected function dispatchPushEvent(array $msg): void
     {
         $eventName = $msg['event'] ?? null;
@@ -69,5 +78,24 @@ class SymfonyEventBridgeIpcBridge extends IpcBridge
         if ($event instanceof AppBeforeQuitEvent && $event->isPrevented()) {
             $this->send('app.cancelQuit');
         }
+    }
+
+    /**
+     * Fires a NativeRuntimeCrashedEvent so application code can react
+     * (show a UI warning, attempt graceful shutdown, etc.) before the
+     * bridge tries to reconnect automatically.
+     */
+    protected function onTransportLost(string $reason): void
+    {
+        parent::onTransportLost($reason);
+
+        $nextRetryIn = self::RECONNECT_BASE_DELAY / 1_000_000;
+
+        $event = new NativeRuntimeCrashedEvent(
+            reason:      $reason,
+            nextRetryIn: $nextRetryIn,
+        );
+
+        $this->eventDispatcher->dispatch($event, NativeRuntimeCrashedEvent::NAME);
     }
 }

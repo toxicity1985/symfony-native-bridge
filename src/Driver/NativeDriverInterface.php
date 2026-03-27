@@ -89,6 +89,13 @@ interface NativeDriverInterface
      */
     public function destroyTray(string $trayId): void;
 
+    /**
+     * List all active tray IDs.
+     *
+     * @return string[]
+     */
+    public function listTrays(): array;
+
     // -------------------------------------------------------------------------
     // Notifications
     // -------------------------------------------------------------------------

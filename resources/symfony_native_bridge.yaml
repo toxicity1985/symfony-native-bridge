@@ -39,3 +39,24 @@ symfony_native_bridge:
         targets:              ["current"]   # or ["windows", "macos", "linux"]
         php_binary_embedded:  true
         php_binary_path:      ~             # null = auto-detect system PHP
+
+    # ── Error handling ────────────────────────────────────────────────────────
+    # When strict: true, IpcBridge throws typed exceptions instead of returning
+    # null silently.
+    #
+    # RuntimeAbsentException  → runtime not started (normal in CLI / tests)
+    # RuntimeCrashedException → runtime was connected but died mid-session
+    #
+    # Example listener for runtime crash events:
+    #
+    #   use SymfonyNativeBridge\Attribute\AsNativeListener;
+    #   use SymfonyNativeBridge\Event\NativeRuntimeCrashedEvent;
+    #
+    #   #[AsNativeListener(NativeRuntimeCrashedEvent::class)]
+    #   public function onRuntimeCrashed(NativeRuntimeCrashedEvent $event): void
+    #   {
+    #       // $event->reason       — human-readable cause
+    #       // $event->nextRetryIn  — seconds before first reconnect attempt
+    #   }
+    #
+    strict: false
